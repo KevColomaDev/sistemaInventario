@@ -9,7 +9,6 @@ from src.views.components.sidebar import Sidebar
 from src.views.productos.productos_view import ProductosView
 from src.views.categorias.categorias_view import CategoriasView
 from src.views.ventas.ventas_view import VentasView
-from src.views.reportes.reportes_view import ReportesView
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -75,8 +74,6 @@ class MainWindow(QMainWindow):
         # Vista de ventas
         self.ventas_view = VentasView()
         
-        # Vista de reportes
-        self.reportes_view = ReportesView()
         
         # Vista de configuración
         self.config_widget = QWidget()
@@ -87,7 +84,6 @@ class MainWindow(QMainWindow):
         self.stacked_widget.addWidget(self.productos_view)
         self.stacked_widget.addWidget(self.categorias_view)
         self.stacked_widget.addWidget(self.ventas_view)
-        self.stacked_widget.addWidget(self.reportes_view)
         self.stacked_widget.addWidget(self.config_widget)
     
     def setup_inicio_view(self):
@@ -134,7 +130,7 @@ class MainWindow(QMainWindow):
             'productos': 1,
             'categorias': 2,
             'ventas': 3,
-            'reportes': 4,
+
             'configuracion': 0
         }
         

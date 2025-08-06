@@ -8,7 +8,7 @@ from src.views.components.nav_button import NavButton
 
 class Sidebar(QWidget):
     # Señales para cambiar de vista
-    view_changed = pyqtSignal(str)  # 'inicio', 'productos', 'categorias', 'reportes', 'configuracion'
+    view_changed = pyqtSignal(str)  # 'inicio', 'productos', 'categorias', 'configuracion'
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -61,10 +61,6 @@ class Sidebar(QWidget):
         self.btn_ventas = NavButton("Ventas", "")
         self.btn_ventas.setIcon(sales_icon)
         
-        # Reportes
-        report_icon = QIcon.fromTheme("view-statistics", style.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
-        self.btn_reportes = NavButton("Reportes", "")
-        self.btn_reportes.setIcon(report_icon)
         
         # Configuración
         settings_icon = QIcon.fromTheme("preferences-system", style.standardIcon(QStyle.StandardPixmap.SP_ComputerIcon))
@@ -76,7 +72,6 @@ class Sidebar(QWidget):
         self.btn_productos.clicked.connect(lambda: self.emit_view_changed('productos'))
         self.btn_categorias.clicked.connect(lambda: self.emit_view_changed('categorias'))
         self.btn_ventas.clicked.connect(lambda: self.emit_view_changed('ventas'))
-        self.btn_reportes.clicked.connect(lambda: self.emit_view_changed('reportes'))
         self.btn_configuracion.clicked.connect(lambda: self.emit_view_changed('inicio'))  # Configuración va a inicio por ahora
         
         print("Sidebar: Señales de botones conectadas")  # Debug
@@ -93,7 +88,6 @@ class Sidebar(QWidget):
         layout.addWidget(self.btn_productos)
         layout.addWidget(self.btn_categorias)
         layout.addWidget(self.btn_ventas)
-        layout.addWidget(self.btn_reportes)
         layout.addSpacing(16)
         layout.addWidget(separator)
         layout.addWidget(spacer)
