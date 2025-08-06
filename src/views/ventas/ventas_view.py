@@ -141,11 +141,6 @@ class VentasView(QWidget):
         self.fecha_hasta.setDate(QDate.currentDate())
         self.fecha_hasta.dateChanged.connect(self.filtrar_ventas)
         
-        self.estado_combo = QComboBox()
-        self.estado_combo.addItem("Todas", "")
-        self.estado_combo.addItem("Completadas", "completada")
-        self.estado_combo.addItem("Canceladas", "cancelada")
-        self.estado_combo.currentIndexChanged.connect(self.filtrar_ventas)
         
         tool_layout.addWidget(self.btn_nueva_venta)
         tool_layout.addStretch()
@@ -153,8 +148,6 @@ class VentasView(QWidget):
         tool_layout.addWidget(self.fecha_desde)
         tool_layout.addWidget(QLabel("Hasta:"))
         tool_layout.addWidget(self.fecha_hasta)
-        tool_layout.addWidget(QLabel("Estado:"))
-        tool_layout.addWidget(self.estado_combo)
         tool_layout.addWidget(QLabel("Buscar:"))
         tool_layout.addWidget(self.buscar_input)
         
@@ -162,9 +155,9 @@ class VentasView(QWidget):
         
         # Tabla de ventas
         self.tabla_ventas = QTableWidget()
-        self.tabla_ventas.setColumnCount(5)
+        self.tabla_ventas.setColumnCount(4)
         self.tabla_ventas.setHorizontalHeaderLabels([
-            "Código", "Fecha", "Total", "Estado", "Acciones"
+            "Código", "Fecha", "Total", "Acciones"
         ])
         self.tabla_ventas.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self.tabla_ventas.horizontalHeader().setStretchLastSection(True)
@@ -225,9 +218,7 @@ class VentasView(QWidget):
         
         fecha_desde = self.fecha_desde.date().toPyDate()
         fecha_hasta = self.fecha_hasta.date().toPyDate()
-        estado = self.estado_combo.currentData()
-        
-        ventas = Venta.obtener_todas(fecha_desde, fecha_hasta, estado)
+        ventas = Venta.obtener_todas(fecha_desde, fecha_hasta)
         
         for venta in ventas:
             self.agregar_venta_tabla(venta)
@@ -250,13 +241,6 @@ class VentasView(QWidget):
         total_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.tabla_ventas.setItem(row, 2, total_item)
         
-        # Estado
-        estado_item = QTableWidgetItem(venta.estado.capitalize())
-        estado_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-        if venta.estado == 'cancelada':
-            estado_item.setForeground(Qt.GlobalColor.red)
-        self.tabla_ventas.setItem(row, 3, estado_item)
-        
         # Acciones
         acciones_widget = QWidget()
         acciones_layout = QHBoxLayout(acciones_widget)
@@ -269,11 +253,6 @@ class VentasView(QWidget):
         
         acciones_layout.addWidget(btn_ver)
         
-        if venta.estado == 'completada':
-            btn_cancelar = QPushButton("Cancelar")
-            btn_cancelar.setObjectName("btn_cancelar")
-            btn_cancelar.clicked.connect(lambda _, v=venta: self.cancelar_venta(v))
-            acciones_layout.addWidget(btn_cancelar)
         
         acciones_layout.addStretch()
         self.tabla_ventas.setCellWidget(row, 4, acciones_widget)

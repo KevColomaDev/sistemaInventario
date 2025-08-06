@@ -65,13 +65,6 @@ class VentaDialog(QDialog):
         self.fecha_input.setEnabled(not self.read_only)
         form_layout.addRow("Fecha:", self.fecha_input)
         
-        # Estado
-        self.estado_combo = QComboBox()
-        self.estado_combo.addItem("Completada", "completada")
-        self.estado_combo.addItem("Cancelada", "cancelada")
-        self.estado_combo.setCurrentIndex(0 if not self.venta.estado or self.venta.estado == 'completada' else 1)
-        self.estado_combo.setEnabled(not self.read_only)
-        form_layout.addRow("Estado:", self.estado_combo)
         
         info_layout.addLayout(form_layout)
         
@@ -210,8 +203,6 @@ class VentaDialog(QDialog):
         self.tabla_productos.resizeColumnsToContents()
         
         # Mostrar botón de cancelar si la venta está completada
-        if self.venta.estado == 'completada' and not self.read_only:
-            self.btn_cancelar_venta.setVisible(True)
     
     def agregar_producto(self):
         """Abre el diálogo para agregar un producto a la venta"""
@@ -323,7 +314,6 @@ class VentaDialog(QDialog):
         
         # Crear o actualizar la venta
         self.venta.fecha_venta = self.fecha_input.date().toPyDate()
-        self.venta.estado = self.estado_combo.currentData()
         self.venta.notas = self.notas_input.toPlainText()
         
         # Limpiar ítems existentes
@@ -377,13 +367,6 @@ class VentaDialog(QDialog):
     
     def cancelar_venta(self):
         """Cancela la venta actual"""
-        if self.venta.estado == 'cancelada':
-            QMessageBox.information(
-                self,
-                "Venta ya cancelada",
-                "Esta venta ya ha sido cancelada anteriormente."
-            )
-            return
         
         reply = QMessageBox.question(
             self, 
