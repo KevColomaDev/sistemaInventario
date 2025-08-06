@@ -151,7 +151,12 @@ class ProductosView(QWidget):
                 background-color: white;
                 color: #111;
             }
-            
+            QComboBox QAbstractItemView {
+                background-color: white;
+                color: #111;
+                selection-background-color: #EADBC8;
+                selection-color: #111;
+            }
             QPushButton {
                 background-color: #DAC0A3;
                 border: none;

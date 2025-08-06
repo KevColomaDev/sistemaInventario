@@ -110,7 +110,14 @@ class ProductoDialog(QDialog):
                 border: 1px solid #DAC0A3;
                 border-radius: 4px;
                 background-color: white;
-                color: #4A4A4A;
+                color: #111;
+            }
+            
+            QComboBox QAbstractItemView {
+                background-color: white;
+                color: #111;
+                selection-background-color: #EADBC8;
+                selection-color: #111;
             }
             
             QTextEdit {
