@@ -148,6 +148,8 @@ class ProductosView(QWidget):
                 border: 1px solid #DAC0A3;
                 border-radius: 4px;
                 min-width: 200px;
+                background-color: white;
+                color: #111;
             }
             
             QPushButton {
