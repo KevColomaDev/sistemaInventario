@@ -193,24 +193,20 @@ class VentasView(QWidget):
     def setup_styles(self):
         """Configura los estilos de la vista"""
         self.setStyleSheet("""
-            /* Inputs y combos (paleta similar) */
             QLineEdit, QComboBox, QDateEdit {
                 padding: 6px 8px;
                 border: 1px solid #DAC0A3;
                 border-radius: 4px;
                 min-width: 200px;
                 background-color: white;
-                color: #000;
+                color: #111;
             }
-
             QComboBox QAbstractItemView {
                 background-color: white;
-                color: #000;
+                color: #111;
                 selection-background-color: #EADBC8;
-                selection-color: #000;
+                selection-color: #111;
             }
-
-            /* Botones */
             QPushButton {
                 background-color: #DAC0A3;
                 border: none;
@@ -219,17 +215,9 @@ class VentasView(QWidget):
                 color: #4A4A4A;
                 font-weight: 500;
             }
+            QPushButton:hover { background-color: #C8AE7D; }
+            QPushButton:disabled { background-color: #EADBC8; color: #9E9E9E; }
 
-            QPushButton:hover {
-                background-color: #C8AE7D;
-            }
-
-            QPushButton:disabled {
-                background-color: #EADBC8;
-                color: #9E9E9E;
-            }
-
-            /* Tabla */
             QTableWidget {
                 background-color: white;
                 border: 1px solid #DAC0A3;
@@ -237,29 +225,20 @@ class VentasView(QWidget):
                 gridline-color: #EADBC8;
                 selection-background-color: #EADBC8;
             }
-            QTableWidget::item { color: #000; }
-            QLabel { color: #000; }
-
             QHeaderView::section {
-                background-color: #EADBC8;
+                background-color: #f0f0f0; /* gris medio claro */
                 padding: 8px;
                 border: none;
                 font-weight: bold;
-                color: #000;
+                color: black; /* letras en negro */
             }
-
-            /* Botón de acción en tabla */
-            QPushButton#btn_ver {
-                color: white;
-                background-color: #0078d7; /* como btn_editar */
-                border: none;
-                padding: 3px 8px;
+            #resumenWidget {
+                background-color: #F5F5F5;
+                border: 1px solid #E0E0E0;
                 border-radius: 4px;
-                margin: 1px;
+                padding: 8px 16px;
             }
-            QPushButton#btn_ver:hover {
-                background-color: #106ebe;
-            }
+            #resumenWidget QLabel { color: #4A4A4A; font-size: 13px; }
         """)
     
     def cargar_ventas(self):
