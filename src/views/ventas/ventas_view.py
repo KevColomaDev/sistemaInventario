@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QLabel,
     QLineEdit, QMessageBox, QDateEdit, QComboBox, QFormLayout,
     QAbstractItemView, QDialog, QDialogButtonBox, QSpinBox,
-    QDoubleSpinBox, QSizePolicy
+    QDoubleSpinBox, QSizePolicy, QFrame
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QDate, QSize
 from PyQt6.QtGui import QIcon, QFont, QPixmap
@@ -155,60 +155,110 @@ class VentasView(QWidget):
         
         # Tabla de ventas
         self.tabla_ventas = QTableWidget()
-        self.tabla_ventas.setColumnCount(4)
+        self.tabla_ventas.setColumnCount(5)
         self.tabla_ventas.setHorizontalHeaderLabels([
-            "Código", "Fecha", "Total", "Acciones"
+            "Código", "Fecha", "Productos", "Total", "Acciones"
         ])
-        self.tabla_ventas.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.tabla_ventas.horizontalHeader().setStretchLastSection(True)
+        # Ajuste de columnas (similar a productos/categorías)
+        header = self.tabla_ventas.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Código
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Fecha
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)           # Productos (ocupa ancho disponible)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Total
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Acciones
+        header.setStretchLastSection(False)
         self.tabla_ventas.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.tabla_ventas.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.tabla_ventas.verticalHeader().setVisible(False)
         
         layout.addWidget(self.tabla_ventas)
-        
+
+        # Resumen (pie de página)
+        resumen_widget = QFrame()
+        resumen_widget.setObjectName("resumenWidget")
+        resumen_layout = QHBoxLayout(resumen_widget)
+
+        self.lbl_total_ventas = QLabel("Total de ventas: 0")
+        self.lbl_monto_total = QLabel("Monto total: $0.00")
+
+        resumen_layout.addWidget(self.lbl_total_ventas)
+        resumen_layout.addStretch()
+        resumen_layout.addWidget(self.lbl_monto_total)
+
+        layout.addWidget(resumen_widget)
+
         # Estilos
         self.setup_styles()
     
     def setup_styles(self):
         """Configura los estilos de la vista"""
         self.setStyleSheet("""
+            /* Inputs y combos (paleta similar) */
+            QLineEdit, QComboBox, QDateEdit {
+                padding: 6px 8px;
+                border: 1px solid #DAC0A3;
+                border-radius: 4px;
+                min-width: 200px;
+                background-color: white;
+                color: #000;
+            }
+
+            QComboBox QAbstractItemView {
+                background-color: white;
+                color: #000;
+                selection-background-color: #EADBC8;
+                selection-color: #000;
+            }
+
+            /* Botones */
+            QPushButton {
+                background-color: #DAC0A3;
+                border: none;
+                border-radius: 4px;
+                padding: 6px 12px;
+                color: #4A4A4A;
+                font-weight: 500;
+            }
+
+            QPushButton:hover {
+                background-color: #C8AE7D;
+            }
+
+            QPushButton:disabled {
+                background-color: #EADBC8;
+                color: #9E9E9E;
+            }
+
+            /* Tabla */
             QTableWidget {
                 background-color: white;
-                border: 1px solid #e0e0e0;
+                border: 1px solid #DAC0A3;
                 border-radius: 4px;
-                gridline-color: #f0f0f0;
+                gridline-color: #EADBC8;
+                selection-background-color: #EADBC8;
             }
-            
+            QTableWidget::item { color: #000; }
+            QLabel { color: #000; }
+
             QHeaderView::section {
-                background-color: #f5f5f5;
+                background-color: #EADBC8;
                 padding: 8px;
                 border: none;
                 font-weight: bold;
-                color: #333;
+                color: #000;
             }
-            
-            QPushButton {
-                padding: 6px 12px;
-                border-radius: 4px;
-                border: 1px solid #d0d0d0;
-                background-color: #f8f8f8;
-            }
-            
-            QPushButton:hover {
-                background-color: #e8e8e8;
-            }
-            
+
+            /* Botón de acción en tabla */
             QPushButton#btn_ver {
-                background-color: #4a90e2;
                 color: white;
+                background-color: #0078d7; /* como btn_editar */
                 border: none;
+                padding: 3px 8px;
+                border-radius: 4px;
+                margin: 1px;
             }
-            
-            QPushButton#btn_cancelar {
-                background-color: #e74c3c;
-                color: white;
-                border: none;
-                margin-left: 5px;
+            QPushButton#btn_ver:hover {
+                background-color: #106ebe;
             }
         """)
     
@@ -222,6 +272,8 @@ class VentasView(QWidget):
         
         for venta in ventas:
             self.agregar_venta_tabla(venta)
+        # Actualizar resumen después de cargar
+        self.actualizar_resumen()
     
     def agregar_venta_tabla(self, venta):
         """Agrega una venta a la tabla"""
@@ -235,11 +287,33 @@ class VentasView(QWidget):
         # Fecha
         fecha_item = QTableWidgetItem(venta.fecha_venta.strftime("%Y-%m-%d %H:%M"))
         self.tabla_ventas.setItem(row, 1, fecha_item)
+
+        # Productos (lista corta "Nombre x Cant.")
+        try:
+            venta_completa = Venta.obtener_por_id(venta.id)
+            resumen_items = []
+            if venta_completa and getattr(venta_completa, 'items', None):
+                for it in venta_completa.items:
+                    prod = Producto.obtener_por_id(it.producto_id)
+                    if prod:
+                        resumen_items.append(f"{prod.nombre} x {it.cantidad}")
+            # Limitar a 3 elementos y recortar
+            max_items = 3
+            mostrado = resumen_items[:max_items]
+            extra = len(resumen_items) - len(mostrado)
+            texto = ", ".join(mostrado)
+            if extra > 0:
+                texto = f"{texto} +{extra} más"
+            productos_item = QTableWidgetItem(texto)
+            productos_item.setToolTip("\n".join(resumen_items))
+        except Exception:
+            productos_item = QTableWidgetItem("")
+        self.tabla_ventas.setItem(row, 2, productos_item)
         
         # Total
         total_item = QTableWidgetItem(f"$ {venta.total:.2f}")
         total_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.tabla_ventas.setItem(row, 2, total_item)
+        self.tabla_ventas.setItem(row, 3, total_item)
         
         # Acciones
         acciones_widget = QWidget()
@@ -255,7 +329,7 @@ class VentasView(QWidget):
         
         
         acciones_layout.addStretch()
-        self.tabla_ventas.setCellWidget(row, 3, acciones_widget)
+        self.tabla_ventas.setCellWidget(row, 4, acciones_widget)
     
     def nueva_venta(self):
         """Abre el diálogo para crear una nueva venta"""
@@ -320,7 +394,29 @@ class VentasView(QWidget):
                 self.tabla_ventas.setRowHidden(row, False)
             else:
                 self.tabla_ventas.setRowHidden(row, True)
+        # Actualizar resumen considerando filas visibles
+        self.actualizar_resumen()
     
     def filtrar_ventas(self):
         """Filtra las ventas por fecha y estado"""
         self.cargar_ventas()
+
+    def actualizar_resumen(self):
+        """Actualiza el resumen de ventas en el pie de página"""
+        total_ventas_visibles = 0
+        monto_total = 0.0
+
+        for row in range(self.tabla_ventas.rowCount()):
+            if self.tabla_ventas.isRowHidden(row):
+                continue
+            total_ventas_visibles += 1
+            total_text = self.tabla_ventas.item(row, 3)
+            if total_text:
+                valor = total_text.text().replace('$', '').replace(',', '').strip()
+                try:
+                    monto_total += float(valor)
+                except ValueError:
+                    pass
+
+        self.lbl_total_ventas.setText(f"Total de ventas: {total_ventas_visibles}")
+        self.lbl_monto_total.setText(f"Monto total: ${monto_total:,.2f}")
