@@ -387,13 +387,17 @@ class VentasView(QWidget):
     def buscar_ventas(self):
         """Busca ventas por código"""
         texto = self.buscar_input.text().strip().lower()
-        
+
         for row in range(self.tabla_ventas.rowCount()):
-            codigo = self.tabla_ventas.item(row, 0).text().lower()
-            if texto in codigo:
-                self.tabla_ventas.setRowHidden(row, False)
-            else:
-                self.tabla_ventas.setRowHidden(row, True)
+            # Código
+            codigo_item = self.tabla_ventas.item(row, 0)
+            codigo = codigo_item.text().lower() if codigo_item else ""
+            # Productos (columna 2)
+            productos_item = self.tabla_ventas.item(row, 2)
+            productos = productos_item.text().lower() if productos_item else ""
+
+            coincide = (texto in codigo) or (texto in productos)
+            self.tabla_ventas.setRowHidden(row, not coincide) if texto else self.tabla_ventas.setRowHidden(row, False)
         # Actualizar resumen considerando filas visibles
         self.actualizar_resumen()
     
