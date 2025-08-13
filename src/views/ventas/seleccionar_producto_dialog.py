@@ -1,12 +1,14 @@
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, 
     QTableWidget, QTableWidgetItem, QHeaderView, QLabel,
-    QLineEdit, QMessageBox, QAbstractItemView, QDialogButtonBox
+    QLineEdit, QMessageBox, QAbstractItemView, QDialogButtonBox,
+    QComboBox
 )
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QIcon, QFont
 
 from src.models.producto import Producto
+from src.models.categoria import Categoria
 
 
 class SeleccionarProductoDialog(QDialog):
@@ -17,21 +19,28 @@ class SeleccionarProductoDialog(QDialog):
         
         self.producto_seleccionado = None
         self.setup_ui()
+        self.cargar_categorias()
         self.cargar_productos()
     
     def setup_ui(self):
         """Configura la interfaz de usuario del diálogo"""
         layout = QVBoxLayout(self)
         
-        # Barra de búsqueda
+        # Barra de búsqueda y filtro por categoría
         search_layout = QHBoxLayout()
-        
+
         self.buscar_input = QLineEdit()
         self.buscar_input.setPlaceholderText("Buscar productos...")
         self.buscar_input.textChanged.connect(self.filtrar_productos)
-        
+
+        self.categoria_combo = QComboBox()
+        self.categoria_combo.addItem("Todas las categorías", None)
+        self.categoria_combo.currentIndexChanged.connect(self.filtrar_productos)
+
         search_layout.addWidget(QLabel("Buscar:"))
         search_layout.addWidget(self.buscar_input)
+        search_layout.addWidget(QLabel("Categoría:"))
+        search_layout.addWidget(self.categoria_combo)
         
         layout.addLayout(search_layout)
         
@@ -41,8 +50,13 @@ class SeleccionarProductoDialog(QDialog):
         self.tabla_productos.setHorizontalHeaderLabels([
             "Código", "Nombre", "Categoría", "Precio Venta", "Stock"
         ])
-        self.tabla_productos.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
-        self.tabla_productos.horizontalHeader().setStretchLastSection(True)
+        header = self.tabla_productos.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Código
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)           # Nombre (ocupa ancho disponible)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Categoría
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Precio
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Stock
+        header.setStretchLastSection(False)
         self.tabla_productos.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.tabla_productos.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.tabla_productos.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -70,19 +84,20 @@ class SeleccionarProductoDialog(QDialog):
     
     def cargar_productos(self, filtro=None):
         """Carga los productos en la tabla"""
+        categoria_id = self.categoria_combo.currentData() if hasattr(self, 'categoria_combo') else None
         if filtro:
-            productos = Producto.buscar(filtro)
+            productos = Producto.buscar(filtro, categoria_id)
         else:
-            # Obtener solo productos con stock mayor a 0
-            productos = [p for p in Producto.obtener_todos() if p.cantidad > 0]
+            productos = Producto.obtener_todos(categoria_id)
+        # Obtener solo productos con stock mayor a 0
+        productos = [p for p in productos if getattr(p, 'cantidad', 0) > 0]
         
         self.tabla_productos.setRowCount(0)
         
         for producto in productos:
             self.agregar_producto_tabla(producto)
         
-        # Ajustar columnas
-        self.tabla_productos.resizeColumnsToContents()
+        # Ajuste de columnas manejado por header (sin forzar resize por contenido)
     
     def agregar_producto_tabla(self, producto):
         """Agrega un producto a la tabla"""
@@ -101,8 +116,8 @@ class SeleccionarProductoDialog(QDialog):
         nombre_item = QTableWidgetItem(producto.nombre)
         self.tabla_productos.setItem(row, 1, nombre_item)
         
-        # Categoría
-        categoria_nombre = producto.categoria.nombre if hasattr(producto, 'categoria') and producto.categoria else "Sin categoría"
+        # Categoría (usar atributo categoria_nombre del modelo Producto)
+        categoria_nombre = getattr(producto, 'categoria_nombre', None) or "Sin categoría"
         categoria_item = QTableWidgetItem(categoria_nombre)
         self.tabla_productos.setItem(row, 2, categoria_item)
         
@@ -127,6 +142,23 @@ class SeleccionarProductoDialog(QDialog):
         """Filtra los productos según el texto de búsqueda"""
         filtro = self.buscar_input.text().strip()
         self.cargar_productos(filtro if filtro else None)
+
+    def cargar_categorias(self):
+        """Carga las categorías en el combo"""
+        if not hasattr(self, 'categoria_combo'):
+            return
+        self.categoria_combo.blockSignals(True)
+        current = self.categoria_combo.currentData()
+        self.categoria_combo.clear()
+        self.categoria_combo.addItem("Todas las categorías", None)
+        for cat in Categoria.obtener_todas():
+            self.categoria_combo.addItem(cat.nombre, cat.id)
+        # Restaurar selección si posible
+        if current is not None:
+            idx = self.categoria_combo.findData(current)
+            if idx >= 0:
+                self.categoria_combo.setCurrentIndex(idx)
+        self.categoria_combo.blockSignals(False)
     
     def aceptar_seleccion(self):
         """Acepta la selección del producto"""
