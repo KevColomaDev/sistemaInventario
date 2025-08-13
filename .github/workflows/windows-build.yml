@@ -35,26 +35,28 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
 
-          $name = "SistemaInventario"   # nombre del exe
-          $entry = "src\\main.py"       # ajusta si tu entry point cambia
-          $icon = "assets\\icon.ico"    # opcional, si existe
+          $name  = "SistemaInventario"   # nombre del exe
+          $entry = "src\\main.py"        # ajusta si tu entry point cambia
+          $icon  = "assets\\icon.ico"     # opcional, si existe
 
-          $args = @("--name `"$name`"", "--onefile", "--windowed")
+          # Construir argumentos sin comillas embebidas y en tokens separados
+          $args = @('--name', $name, '--onefile', '--windowed')
 
           if (Test-Path $icon) {
-            $args += "--icon `"$icon`""
+            $args += @('--icon', $icon)
           }
 
           # Incluir assets si existen (ajusta rutas si tienes otra carpeta de recursos)
           if (Test-Path "src\\assets") {
-            $args += '--add-data "src\\assets;assets"'
+            $args += @('--add-data', 'src\\assets;assets')
           }
 
           # Ejemplos de hidden imports (descomenta/ajusta si usas PyQt/PySide)
-          # $args += '--hidden-import PyQt5.sip'
-          # $args += '--hidden-import PySide6'
+          # $args += @('--hidden-import', 'PyQt5.sip')
+          # $args += @('--hidden-import', 'PySide6')
 
-          pyinstaller $args $entry
+          # Ejecutar PyInstaller (también funciona con: python -m PyInstaller)
+          pyinstaller @args $entry
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
