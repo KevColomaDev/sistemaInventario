@@ -122,6 +122,10 @@ class MainWindow(QMainWindow):
         # Señales de categorías
         self.categorias_view.agregar_categoria.connect(self.mostrar_dialogo_categoria)
         self.categorias_view.editar_categoria.connect(self.mostrar_dialogo_editar_categoria)
+
+        # Señales de ventas: refrescar vistas tras realizar una venta
+        if hasattr(self, 'ventas_view'):
+            self.ventas_view.venta_realizada.connect(self.actualizar_vistas)
     
     def cambiar_vista(self, nombre_vista):
         """Cambia la vista actual según la selección del menú"""

@@ -70,54 +70,50 @@ class SeleccionarProductoDialog(QDialog):
     
     def cargar_productos(self, filtro=None):
         """Carga los productos en la tabla"""
-        # Obtener productos con stock mayor a 0
-        query = """
-        SELECT p.*, c.nombre as categoria_nombre 
-        FROM productos p
-        LEFT JOIN categorias c ON p.categoria_id = c.id
-        WHERE p.cantidad > 0
-        """
-        
         if filtro:
-            query += " AND (p.codigo LIKE ? OR p.nombre LIKE ? OR c.nombre LIKE ?)"
-            filtro = f"%{filtro}%"
-            params = (filtro, filtro, filtro)
-            productos = Producto.ejecutar_consulta(query, params)
+            productos = Producto.buscar(filtro)
         else:
-            productos = Producto.ejecutar_consulta(query)
+            # Obtener solo productos con stock mayor a 0
+            productos = [p for p in Producto.obtener_todos() if p.cantidad > 0]
         
         self.tabla_productos.setRowCount(0)
         
-        for producto_data in productos:
-            self.agregar_producto_tabla(producto_data)
+        for producto in productos:
+            self.agregar_producto_tabla(producto)
         
         # Ajustar columnas
         self.tabla_productos.resizeColumnsToContents()
     
-    def agregar_producto_tabla(self, producto_data):
+    def agregar_producto_tabla(self, producto):
         """Agrega un producto a la tabla"""
+        if not producto or not hasattr(producto, 'id'):
+            return
+            
         row = self.tabla_productos.rowCount()
         self.tabla_productos.insertRow(row)
         
-        # Código
-        codigo_item = QTableWidgetItem(producto_data['codigo'])
+        # Código - Guardamos el ID del producto en UserRole para usarlo después
+        codigo_item = QTableWidgetItem(producto.codigo)
+        codigo_item.setData(Qt.ItemDataRole.UserRole, producto.id)  # Almacenar el ID
         self.tabla_productos.setItem(row, 0, codigo_item)
         
         # Nombre
-        nombre_item = QTableWidgetItem(producto_data['nombre'])
+        nombre_item = QTableWidgetItem(producto.nombre)
         self.tabla_productos.setItem(row, 1, nombre_item)
         
         # Categoría
-        categoria_item = QTableWidgetItem(producto_data['categoria_nombre'] or "Sin categoría")
+        categoria_nombre = producto.categoria.nombre if hasattr(producto, 'categoria') and producto.categoria else "Sin categoría"
+        categoria_item = QTableWidgetItem(categoria_nombre)
         self.tabla_productos.setItem(row, 2, categoria_item)
         
-        # Precio de venta
-        precio_item = QTableWidgetItem(f"$ {float(producto_data['precio_venta'] or 0):.2f}")
+        # Precio de venta - Usar el atributo 'precio' en lugar de 'precio_venta'
+        precio = float(getattr(producto, 'precio', 0.0))
+        precio_item = QTableWidgetItem(f"$ {precio:.2f}")
         precio_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.tabla_productos.setItem(row, 3, precio_item)
         
         # Stock
-        stock = int(producto_data['cantidad'] or 0)
+        stock = int(getattr(producto, 'cantidad', 0))
         stock_item = QTableWidgetItem(str(stock))
         stock_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
         
@@ -143,12 +139,20 @@ class SeleccionarProductoDialog(QDialog):
             )
             return
         
-        # Obtener el código del producto seleccionado
+        # Obtener el ID del producto seleccionado desde los datos de la tabla
         row = selected[0].row()
-        codigo = self.tabla_productos.item(row, 0).text()
+        producto_id = self.tabla_productos.item(row, 0).data(Qt.ItemDataRole.UserRole)  # Almacenamos el ID en UserRole
         
-        # Obtener el producto completo de la base de datos
-        self.producto_seleccionado = Producto.obtener_por_codigo(codigo)
+        if not producto_id:
+            QMessageBox.critical(
+                self,
+                "Error",
+                "No se pudo identificar el producto seleccionado."
+            )
+            return
+        
+        # Obtener el producto completo de la base de datos usando el ID
+        self.producto_seleccionado = Producto.obtener_por_id(producto_id)
         
         if not self.producto_seleccionado:
             QMessageBox.critical(
@@ -157,7 +161,7 @@ class SeleccionarProductoDialog(QDialog):
                 "No se pudo cargar la información del producto seleccionado."
             )
             return
-        
+            
         self.accept()
     
     def get_producto_seleccionado(self):

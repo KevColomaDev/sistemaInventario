@@ -25,7 +25,7 @@ class VentaItemDialog(QDialog):
         
         self.producto = producto
         self.cantidad = cantidad
-        self.precio_unitario = producto.precio_venta if producto else 0
+        self.precio_unitario = producto.precio if (producto and hasattr(producto, 'precio')) else 0.0
         
         self.setup_ui()
     
@@ -255,15 +255,26 @@ class VentasView(QWidget):
         
         
         acciones_layout.addStretch()
-        self.tabla_ventas.setCellWidget(row, 4, acciones_widget)
+        self.tabla_ventas.setCellWidget(row, 3, acciones_widget)
     
     def nueva_venta(self):
         """Abre el diálogo para crear una nueva venta"""
         from .venta_dialog import VentaDialog
         dialog = VentaDialog(self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
-            self.cargar_ventas()
-            self.venta_realizada.emit()
+        dialog.venta_guardada.connect(self.on_venta_guardada)
+        dialog.exec()
+    
+    def on_venta_guardada(self, venta_id):
+        """Maneja el evento de venta guardada"""
+        self.cargar_ventas()  # Recargar la lista de ventas
+        self.venta_realizada.emit()  # Notificar a otras partes de la aplicación
+        
+        # Mostrar mensaje de éxito
+        QMessageBox.information(
+            self,
+            "Venta guardada",
+            "La venta se ha guardado correctamente."
+        )
     
     def ver_venta(self, venta):
         """Muestra los detalles de una venta"""

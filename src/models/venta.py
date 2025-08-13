@@ -72,8 +72,8 @@ class Venta:
         if self.id is None:
             # Insertar nueva venta
             query = """
-            INSERT INTO ventas (codigo_venta, fecha_venta, total, estado, notas, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO ventas (codigo_venta, fecha_venta, total, estado, notas)
+            VALUES (?, ?, ?, ?, ?)
             """
             venta_id = db.execute_query(
                 query,
@@ -82,9 +82,7 @@ class Venta:
                     self.fecha_venta,
                     self.total,
                     self.estado,
-                    self.notas,
-                    now,
-                    now
+                    self.notas
                 )
             )
             self.id = venta_id
@@ -92,8 +90,8 @@ class Venta:
             # Insertar ítems
             for item in self.items:
                 item_query = """
-                INSERT INTO venta_items (venta_id, producto_id, cantidad, precio_unitario, subtotal, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO venta_items (venta_id, producto_id, cantidad, precio_unitario, subtotal)
+                VALUES (?, ?, ?, ?, ?)
                 """
                 db.execute_query(
                     item_query,
@@ -102,8 +100,7 @@ class Venta:
                         item.producto_id,
                         item.cantidad,
                         item.precio_unitario,
-                        item.subtotal,
-                        now
+                        item.subtotal
                     )
                 )
                 
@@ -116,12 +113,12 @@ class Venta:
             # Actualizar venta existente
             query = """
             UPDATE ventas 
-            SET total = ?, estado = ?, notas = ?, updated_at = ?
+            SET total = ?, estado = ?, notas = ?
             WHERE id = ?
             """
             db.execute_query(
                 query,
-                (self.total, self.estado, self.notas, now, self.id)
+                (self.total, self.estado, self.notas, self.id)
             )
             
             # Eliminar ítems antiguos
@@ -130,8 +127,8 @@ class Venta:
             # Insertar ítems actualizados
             for item in self.items:
                 item_query = """
-                INSERT INTO venta_items (venta_id, producto_id, cantidad, precio_unitario, subtotal, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO venta_items (venta_id, producto_id, cantidad, precio_unitario, subtotal)
+                VALUES (?, ?, ?, ?, ?)
                 """
                 db.execute_query(
                     item_query,
@@ -140,8 +137,7 @@ class Venta:
                         item.producto_id,
                         item.cantidad,
                         item.precio_unitario,
-                        item.subtotal,
-                        now
+                        item.subtotal
                     )
                 )
         
@@ -150,14 +146,14 @@ class Venta:
     @classmethod
     def obtener_por_id(cls, venta_id: int):
         """Obtiene una venta por su ID"""
-        venta_data = db.execute_query(
+        venta_rows = db.execute_query(
             "SELECT * FROM ventas WHERE id = ?",
-            (venta_id,),
-            fetch_one=True
+            (venta_id,)
         )
         
-        if not venta_data:
+        if not venta_rows:
             return None
+        venta_data = venta_rows[0]
             
         # Obtener ítems de la venta
         items_data = db.execute_query(
@@ -165,16 +161,31 @@ class Venta:
             (venta_id,)
         )
         
+        # Asegurar que fecha_venta sea datetime
+        fecha_val = venta_data['fecha_venta']
+        if isinstance(fecha_val, str):
+            try:
+                # Intentar ISO8601 primero
+                fecha_val = datetime.fromisoformat(fecha_val)
+            except Exception:
+                try:
+                    # Fallback común
+                    fecha_val = datetime.strptime(fecha_val, "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    # Último recurso: solo fecha
+                    try:
+                        fecha_val = datetime.strptime(fecha_val, "%Y-%m-%d")
+                    except Exception:
+                        fecha_val = datetime.now()
+
         # Crear objeto Venta
         venta = cls(
             id=venta_data['id'],
             codigo_venta=venta_data['codigo_venta'],
-            fecha_venta=venta_data['fecha_venta'],
+            fecha_venta=fecha_val,
             total=venta_data['total'],
             estado=venta_data['estado'],
-            notas=venta_data['notas'],
-            created_at=venta_data['created_at'],
-            updated_at=venta_data['updated_at']
+            notas=venta_data['notas']
         )
         
         # Agregar ítems
@@ -185,11 +196,23 @@ class Venta:
                 producto_id=item_data['producto_id'],
                 cantidad=item_data['cantidad'],
                 precio_unitario=item_data['precio_unitario'],
-                subtotal=item_data['subtotal'],
-                created_at=item_data['created_at']
+                subtotal=item_data['subtotal']
             )
             venta.items.append(item)
-        
+
+        # Fallback: si algún subtotal vino en 0 o nulo, recalcularlo
+        for it in venta.items:
+            if it.subtotal is None or float(it.subtotal) == 0.0:
+                it.subtotal = round(float(it.cantidad) * float(it.precio_unitario), 2)
+
+        # Fallback: si el total vino 0, recalcular a partir de ítems
+        try:
+            total_val = float(venta.total)
+        except Exception:
+            total_val = 0.0
+        if total_val == 0.0 and venta.items:
+            venta.calcular_total()
+
         return venta
     
     @classmethod
@@ -238,10 +261,10 @@ class Venta:
             )
         
         # Actualizar estado de la venta
-        notas = f"VENTA CANCELADA. {venta.notas or ''} {motro}".strip()
+        notas = f"VENTA CANCELADA. {venta.notas or ''} {motivo}".strip()
         db.execute_query(
-            "UPDATE ventas SET estado = 'cancelada', notas = ?, updated_at = ? WHERE id = ?",
-            (notas, datetime.now(), venta_id)
+            "UPDATE ventas SET estado = 'cancelada', notas = ? WHERE id = ?",
+            (notas, venta_id)
         )
         
         return True

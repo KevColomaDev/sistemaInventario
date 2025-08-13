@@ -14,7 +14,7 @@ from .ventas_view import VentaItemDialog
 
 
 class VentaDialog(QDialog):
-    venta_guardada = pyqtSignal()
+    venta_guardada = pyqtSignal(int)  # Signal emits venta_id when a sale is saved
     
     def __init__(self, parent=None, venta_id=None):
         super().__init__(parent)
@@ -34,6 +34,15 @@ class VentaDialog(QDialog):
         
         self.setup_ui()
     
+    def reject(self):
+        # Si la venta es nueva y hay productos agregados, devolver el stock
+        if self.venta_id is None and hasattr(self, 'venta') and self.venta.items:
+            for item in self.venta.items:
+                producto = Producto.obtener_por_id(item.producto_id)
+                if producto:
+                    producto.actualizar_cantidad(producto.cantidad + item.cantidad, "Devolución por cierre de diálogo de venta")
+        super().reject()
+
     def set_read_only(self):
         """Configura el diálogo como solo lectura"""
         self.read_only = True
@@ -43,6 +52,42 @@ class VentaDialog(QDialog):
         self.btn_agregar_producto.setEnabled(False)
         self.btn_eliminar_producto.setEnabled(False)
         self.notas_input.setReadOnly(True)
+    
+    def cancelar_venta(self):
+        """Cancela la venta actual"""
+        if not self.venta_id:
+            # Si es una venta nueva, simplemente cierra el diálogo
+            self.reject()
+            return
+            
+        reply = QMessageBox.question(
+            self, 'Cancelar Venta',
+            '¿Está seguro que desea cancelar esta venta?\nEsta acción no se puede deshacer.',
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                # Devolver el stock de los productos
+                for item in self.venta.items:
+                    producto = Producto.obtener_por_id(item.producto_id)
+                    if producto:
+                        producto.actualizar_cantidad(
+                            producto.cantidad + item.cantidad,
+                            f"Devolución por cancelación de venta {self.venta.codigo_venta}"
+                        )
+                
+                # Marcar la venta como cancelada
+                self.venta.estado = "cancelada"
+                self.venta.guardar()
+                
+                QMessageBox.information(self, "Venta Cancelada", "La venta ha sido cancelada correctamente.")
+                self.venta_guardada.emit()
+                self.accept()
+                
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Error al cancelar la venta: {str(e)}")
     
     def setup_ui(self):
         """Configura la interfaz de usuario del diálogo"""
@@ -64,7 +109,6 @@ class VentaDialog(QDialog):
         self.fecha_input.setDate(QDate.currentDate())
         self.fecha_input.setEnabled(not self.read_only)
         form_layout.addRow("Fecha:", self.fecha_input)
-        
         
         info_layout.addLayout(form_layout)
         
@@ -96,11 +140,11 @@ class VentaDialog(QDialog):
         self.btn_eliminar_producto = QPushButton("Eliminar Producto")
         self.btn_eliminar_producto.setIcon(QIcon(":/icons/trash-2.png"))
         self.btn_eliminar_producto.clicked.connect(self.eliminar_producto)
+        self.btn_eliminar_producto.setEnabled(False)
         
         btn_layout.addWidget(self.btn_agregar_producto)
         btn_layout.addWidget(self.btn_eliminar_producto)
         btn_layout.addStretch()
-        
         layout.addLayout(btn_layout)
         
         # Tabla de productos
@@ -131,7 +175,6 @@ class VentaDialog(QDialog):
         
         self.btn_guardar = QPushButton("Guardar")
         self.btn_guardar.setIcon(QIcon(":/icons/save.png"))
-        self.btn_guardar.clicked.connect(self.guardar_venta)
         
         self.btn_cancelar_venta = QPushButton("Cancelar Venta")
         self.btn_cancelar_venta.setIcon(QIcon(":/icons/trash-2.png"))
@@ -139,12 +182,8 @@ class VentaDialog(QDialog):
         self.btn_cancelar_venta.setVisible(False)
         
         button_box.addButton(self.btn_guardar, QDialogButtonBox.ButtonRole.AcceptRole)
-        button_box.addButton("Cerrar", QDialogButtonBox.ButtonRole.RejectRole)
         button_box.addButton(self.btn_cancelar_venta, QDialogButtonBox.ButtonRole.ActionRole)
-        
         button_box.accepted.connect(self.guardar_venta)
-        button_box.rejected.connect(self.reject)
-        
         layout.addWidget(button_box)
         
         # Cargar datos si es una venta existente
@@ -203,6 +242,8 @@ class VentaDialog(QDialog):
         self.tabla_productos.resizeColumnsToContents()
         
         # Mostrar botón de cancelar si la venta está completada
+        # Actualizar total mostrado
+        self.actualizar_total()
     
     def agregar_producto(self):
         """Abre el diálogo para agregar un producto a la venta"""
@@ -303,7 +344,8 @@ class VentaDialog(QDialog):
     def actualizar_botones(self):
         """Actualiza el estado de los botones según la selección"""
         selected = bool(self.tabla_productos.selectedItems())
-        self.btn_eliminar_producto.setEnabled(selected and not self.read_only)
+        if hasattr(self, 'btn_eliminar_producto'):
+            self.btn_eliminar_producto.setEnabled(selected and not self.read_only)
     
     def guardar_venta(self):
         """Guarda la venta en la base de datos"""
@@ -312,73 +354,224 @@ class VentaDialog(QDialog):
             QMessageBox.warning(self, "Venta vacía", "Debe agregar al menos un producto a la venta.")
             return
         
-        # Crear o actualizar la venta
-        self.venta.fecha_venta = self.fecha_input.date().toPyDate()
-        self.venta.notas = self.notas_input.toPlainText()
-        
-        # Limpiar ítems existentes
-        self.venta.items = []
-        
-        # Agregar ítems a la venta
-        for row in range(self.tabla_productos.rowCount()):
-            codigo = self.tabla_productos.item(row, 0).text()
-            producto = Producto.obtener_por_codigo(codigo)
-            
-            if not producto:
-                QMessageBox.critical(
-                    self,
-                    "Error",
-                    f"No se encontró el producto con código {codigo}."
-                )
-                return
-            
-            cantidad = int(self.tabla_productos.item(row, 3).text())
-            precio_text = self.tabla_productos.item(row, 2).text().replace("$", "").strip()
-            precio = float(precio_text)
-            
-            # Verificar stock si es una venta nueva
-            if self.venta_id is None and producto.cantidad < cantidad:
-                QMessageBox.warning(
-                    self,
-                    "Stock insuficiente",
-                    f"No hay suficiente stock para el producto {producto.nombre}.\n"
-                    f"Stock disponible: {producto.cantidad}"
-                )
-                return
-            
-            self.venta.agregar_item(producto.id, cantidad, precio)
-        
-        # Guardar la venta
         try:
+            # Crear o actualizar la venta
+            self.venta.fecha_venta = self.fecha_input.date().toPyDate()
+            self.venta.notas = self.notas_input.toPlainText()
+            
+            # Limpiar ítems existentes
+            self.venta.items = []
+            
+            # Recorrer la tabla y guardar los productos
+            for row in range(self.tabla_productos.rowCount()):
+                codigo = self.tabla_productos.item(row, 0).text()
+                cantidad = int(self.tabla_productos.item(row, 3).text())
+                
+                # Obtener el precio sin el símbolo de moneda y convertir a float
+                precio_texto = self.tabla_productos.item(row, 2).text().replace('$', '').strip()
+                precio_unitario = float(precio_texto)
+                
+                # Buscar el producto por código
+                productos = Producto.buscar(codigo)
+                producto = productos[0] if productos else None
+                if not producto:
+                    QMessageBox.warning(
+                        self,
+                        "Producto no encontrado",
+                        f"No se encontró el producto con código {codigo}"
+                    )
+                    return
+                
+                # Verificar stock
+                if producto.cantidad < cantidad:
+                    QMessageBox.warning(
+                        self,
+                        "Stock insuficiente",
+                        f"No hay suficiente stock para {producto.nombre}. Stock disponible: {producto.cantidad}"
+                    )
+                    return
+                
+                # Crear ítem de venta
+                item = VentaItem(
+                    producto_id=producto.id,
+                    cantidad=cantidad,
+                    precio_unitario=precio_unitario
+                )
+                # Calcular subtotal del item
+                item.calcular_subtotal()
+                self.venta.items.append(item)
+            
+            # Guardar la venta en la base de datos (esto también actualiza el stock)
             self.venta.guardar()
+            
             QMessageBox.information(
                 self,
                 "Venta guardada",
-                f"La venta {self.venta.codigo_venta} ha sido guardada correctamente."
+                f"La venta {self.venta.codigo_venta} se ha guardado correctamente."
             )
-            self.venta_guardada.emit()
+            
+            self.venta_guardada.emit(self.venta.id)
             self.accept()
+            
         except Exception as e:
             QMessageBox.critical(
                 self,
-                "Error al guardar",
-                f"No se pudo guardar la venta. Error: {str(e)}"
+                "Error al guardar la venta",
+                f"Ocurrió un error al guardar la venta: {str(e)}"
             )
+
+def agregar_producto_tabla(self, item_data):
+    """Agrega un producto a la tabla de la venta"""
+    producto = item_data['producto']
     
-    def cancelar_venta(self):
-        """Cancela la venta actual"""
-        
-        reply = QMessageBox.question(
-            self, 
-            "Confirmar cancelación",
-            f"¿Está seguro de cancelar la venta {self.venta.codigo_venta}?\n"
-            "Esta acción no se puede deshacer y devolverá el stock al inventario.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
+    row = self.tabla_productos.rowCount()
+    self.tabla_productos.insertRow(row)
+    
+    # Código
+    codigo_item = QTableWidgetItem(producto.codigo)
+    self.tabla_productos.setItem(row, 0, codigo_item)
+    
+    # Nombre
+    nombre_item = QTableWidgetItem(producto.nombre)
+    self.tabla_productos.setItem(row, 1, nombre_item)
+    
+    # Precio unitario
+    precio_item = QTableWidgetItem(f"$ {item_data['precio_unitario']:.2f}")
+    precio_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    self.tabla_productos.setItem(row, 2, precio_item)
+    
+    # Cantidad
+    cantidad_item = QTableWidgetItem(str(item_data['cantidad']))
+    cantidad_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+    self.tabla_productos.setItem(row, 3, cantidad_item)
+    
+    # Subtotal
+    subtotal_item = QTableWidgetItem(f"$ {item_data['subtotal']:.2f}")
+    subtotal_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    self.tabla_productos.setItem(row, 4, subtotal_item)
+    
+    # Ajustar columnas
+    self.tabla_productos.resizeColumnsToContents()
+
+def eliminar_producto(self):
+    """Elimina el producto seleccionado de la venta"""
+    selected = self.tabla_productos.selectedItems()
+    if not selected:
+        QMessageBox.warning(self, "Selección requerida", "Por favor, seleccione un producto para eliminar.")
+        return
+    
+    row = selected[0].row()
+    producto = self.tabla_productos.item(row, 1).text()
+    
+    reply = QMessageBox.question(
+        self,
+        "Confirmar eliminación",
+        f"¿Está seguro de eliminar el producto {producto} de la venta?",
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.No
+    )
+    
+    if reply == QMessageBox.StandardButton.Yes:
+        self.tabla_productos.removeRow(row)
+        self.actualizar_total()
+
+def actualizar_total(self):
+    """Actualiza el total de la venta"""
+    total = 0.0
+    
+    for row in range(self.tabla_productos.rowCount()):
+        subtotal_text = self.tabla_productos.item(row, 4).text().replace("$", "").strip()
+        try:
+            subtotal = float(subtotal_text)
+            total += subtotal
+        except ValueError:
+            pass
+    
+    self.total_label.setText(f"$ {total:.2f}")
+
+def actualizar_botones(self):
+    """Actualiza el estado de los botones según la selección"""
+    selected = bool(self.tabla_productos.selectedItems())
+    self.btn_eliminar_producto.setEnabled(selected and not self.read_only)
+
+def guardar_venta(self):
+    """Guarda la venta en la base de datos"""
+    # Validar que haya al menos un producto
+    if self.tabla_productos.rowCount() == 0:
+        QMessageBox.warning(self, "Venta vacía", "Debe agregar al menos un producto a la venta.")
+        return
+    
+    # Crear o actualizar la venta
+    self.venta.fecha_venta = self.fecha_input.date().toPyDate()
+    self.venta.notas = self.notas_input.toPlainText()
+    
+    # Limpiar ítems existentes
+    self.venta.items = []
+    
+    # Agregar ítems a la venta
+    for row in range(self.tabla_productos.rowCount()):
+        codigo = self.tabla_productos.item(row, 0).text()
+        producto = Producto.obtener_por_codigo(codigo)
+        if not producto:
+            QMessageBox.critical(
+                self,
+                "Error",
+                f"No se encontró el producto con código {codigo}."
+            )
+            return
+        cantidad = int(self.tabla_productos.item(row, 3).text())
+        precio_text = self.tabla_productos.item(row, 2).text().replace("$", "").strip()
+        precio = float(precio_text)
+        # Verificar stock si es una venta nueva
+        if self.venta_id is None and producto.cantidad < cantidad:
+            QMessageBox.warning(
+                self,
+                "Stock insuficiente",
+                f"No hay suficiente stock para el producto {producto.nombre}.\n"
+                f"Stock disponible: {producto.cantidad}"
+            )
+            return
+        self.venta.agregar_item(producto.id, cantidad, precio)
+    
+    # Disminuir stock solo si es una venta nueva
+    if self.venta_id is None:
+        for item in self.venta.items:
+            producto = Producto.obtener_por_id(item.producto_id)
+            if producto:
+                producto.actualizar_cantidad(producto.cantidad - item.cantidad, "Salida por nueva venta")
+    
+    # Guardar la venta
+    try:
+        self.venta.guardar()
+        QMessageBox.information(
+            self,
+            "Venta guardada",
+            f"La venta {self.venta.codigo_venta} ha sido guardada correctamente."
         )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            motivo = "Cancelado desde el diálogo de edición"
+        self.venta_guardada.emit()
+        self.accept()
+    except Exception as e:
+        QMessageBox.critical(
+            self,
+            "Error al guardar",
+            f"No se pudo guardar la venta. Error: {str(e)}"
+        )
+
+def cancelar_venta(self):
+    """Cancela la venta actual"""
+    
+    reply = QMessageBox.question(
+        self, 
+        "Confirmar cancelación",
+        f"¿Está seguro de cancelar la venta {self.venta.codigo_venta}?\n"
+        "Esta acción no se puede deshacer y devolverá el stock al inventario.",
+        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        QMessageBox.StandardButton.No
+    )
+    
+    if reply == QMessageBox.StandardButton.Yes:
+        motivo = "Cancelado desde el diálogo de edición"
+        try:
             if Venta.cancelar_venta(self.venta.id, motivo):
                 QMessageBox.information(
                     self,
@@ -393,3 +586,9 @@ class VentaDialog(QDialog):
                     "Error",
                     "No se pudo cancelar la venta."
                 )
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Error al cancelar",
+                f"No se pudo cancelar la venta. Error: {str(e)}"
+            )
