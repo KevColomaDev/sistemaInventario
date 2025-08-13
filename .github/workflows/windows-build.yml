@@ -1,0 +1,82 @@
+name: Build Windows EXE
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'   # corre al crear un tag como v1.0.0
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'   # ajusta a la versión que usas
+
+      - name: Upgrade pip
+        run: python -m pip install -U pip wheel
+
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          if (Test-Path "requirements.txt") {
+            pip install -r requirements.txt
+          }
+          pip install pyinstaller
+
+      - name: Build EXE with PyInstaller
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $name = "SistemaInventario"   # nombre del exe
+          $entry = "src\\main.py"       # ajusta si tu entry point cambia
+          $icon = "assets\\icon.ico"    # opcional, si existe
+
+          $args = @("--name `"$name`"", "--onefile", "--windowed")
+
+          if (Test-Path $icon) {
+            $args += "--icon `"$icon`""
+          }
+
+          # Incluir assets si existen (ajusta rutas si tienes otra carpeta de recursos)
+          if (Test-Path "src\\assets") {
+            $args += '--add-data "src\\assets;assets"'
+          }
+
+          # Ejemplos de hidden imports (descomenta/ajusta si usas PyQt/PySide)
+          # $args += '--hidden-import PyQt5.sip'
+          # $args += '--hidden-import PySide6'
+
+          pyinstaller $args $entry
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build-windows
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-exe
+          path: dist
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
