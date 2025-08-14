@@ -236,6 +236,9 @@ class Venta:
         query += " ORDER BY fecha_venta DESC"
         
         ventas_data = db.execute_query(query, tuple(params))
+        # Manejar el caso donde execute_query devuelve None por un error
+        if not ventas_data:
+            return []
         ventas = []
         
         for venta_data in ventas_data:
